@@ -18,12 +18,13 @@
 
 // Google retires model names over time, so try current ones in order —
 // a 404 just means "that name is gone", and we move on to the next.
+// Fastest, least-contended models first.
 const MODELS = [
-  "gemini-3.5-flash",
-  "gemini-3.8-flash",
-  "gemini-2.5-flash",
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-2.5-flash",
+  "gemini-3.8-flash",
 ];
 function apiUrl(model) {
   return (
@@ -181,28 +182,37 @@ exports.handler = async (event) => {
   });
 
   let geminiRes = null;
-  try {
-    for (const model of MODELS) {
-      const res = await fetch(apiUrl(model), {
+  let networkFailed = false;
+  const startedAt = Date.now();
+  for (const model of MODELS) {
+    if (Date.now() - startedAt > 25000) break; // stay well inside the host's time limit
+    let res;
+    try {
+      res = await fetch(apiUrl(model), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-goog-api-key": apiKey,
         },
         body: requestBody,
+        signal: AbortSignal.timeout(9000), // never let one slow model eat the whole budget
       });
-      if (res.status === 404) continue; // model name retired/unknown — try the next one
-      if (res.ok) {
-        geminiRes = res;
-        break;
-      }
-      geminiRes = res; // busy/overloaded etc. — remember it, but try the next model too
+    } catch (e) {
+      networkFailed = true;
+      continue; // timed out or unreachable — try the next model
     }
-  } catch (e) {
-    return jsonResponse(502, { error: "Couldn't reach the AI writer just now — check back in a moment and try again." });
+    if (res.status === 404) continue; // model name retired/unknown — try the next one
+    if (res.ok) {
+      geminiRes = res;
+      break;
+    }
+    geminiRes = res; // busy/overloaded etc. — remember it, but try the next model too
   }
 
   if (!geminiRes) {
+    if (networkFailed) {
+      return jsonResponse(502, { error: "Couldn't reach the AI writer just now — check back in a moment and try again." });
+    }
     return jsonResponse(502, { error: "The AI writer had a problem (404) — try again in a moment." });
   }
 
