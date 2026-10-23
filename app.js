@@ -107,14 +107,31 @@ async function loadListings() {
   render();
 }
 
+function newUuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 async function insertListing(l) {
-  const { data, error } = await sb
-    .from("listings")
-    .insert(listingToRow(l))
-    .select()
-    .single();
-  if (error) throw new Error("Your listing was written but couldn't be saved to your shelf — try again.");
-  return rowToListing(data);
+  const row = listingToRow(l);
+  // The app picks the id up front and does NOT ask the server to echo the
+  // row back: the echo (big photo included) is exactly what breaks on a
+  // weak signal and made good saves look like failures. A duplicate-id
+  // reply means an earlier try actually landed — that counts as saved.
+  const id = l.id && !String(l.id).startsWith("local-") ? l.id : newUuid();
+  row.id = id;
+  const { error } = await sb.from("listings").insert(row);
+  if (error && error.code !== "23505") {
+    const code = error.code ? ` (code ${error.code})` : "";
+    throw new Error("Your listing was written but couldn't be saved to your shelf — try again." + code);
+  }
+  const saved = Object.assign({}, l, { id });
+  delete saved.unsaved;
+  return saved;
 }
 
 async function updateListing(l) {
@@ -339,6 +356,8 @@ generateBtn.addEventListener("click", async () => {
   try {
     const data = await callFunction(payload);
     const drafted = {
+      id: newUuid(),
+      createdAt: Date.now(),
       status: "Draft",
       thumb: pendingPhoto ? pendingPhoto.thumbDataUrl : "",
       itemName: data.itemName || "",
@@ -353,15 +372,35 @@ generateBtn.addEventListener("click", async () => {
       platform: data.platform || "Vinted",
       category: data.category || ""
     };
-    const saved = await insertListing(drafted);
-    listings.unshift(saved);
-    render();
-    setCaptureMsg("");
-    // reset capture area for the next one
-    $("textInput").value = "";
-    $("clearPhotoBtn").click();
-    openDetail(saved.id);
-    toast("Listing drafted! It's on your shelf. 🎉");
+    // Saving can fail on a weak signal or a dropped sign-in — retry once,
+    // and if it still fails, keep the written listing on this phone and
+    // open it anyway. The words are never lost; Save finishes the job.
+    let saved = null;
+    try {
+      saved = await insertListing(drafted);
+    } catch (e1) {
+      await new Promise((r) => setTimeout(r, 1200));
+      try { saved = await insertListing(drafted); } catch (e2) { saved = null; }
+    }
+    if (saved) {
+      listings.unshift(saved);
+      render();
+      setCaptureMsg("");
+      // reset capture area for the next one
+      $("textInput").value = "";
+      $("clearPhotoBtn").click();
+      openDetail(saved.id);
+      toast("Listing drafted! It's on your shelf. 🎉");
+    } else {
+      const local = Object.assign({}, drafted, { unsaved: true });
+      listings.unshift(local);
+      render();
+      setCaptureMsg("");
+      $("textInput").value = "";
+      $("clearPhotoBtn").click();
+      openDetail(local.id);
+      toast("Written! It couldn't reach your shelf yet — tap Save changes to finish saving it.");
+    }
   } catch (err) {
     // Keep the photo/text right where it was so she can just retry.
     setCaptureMsg(err.message || "Something went wrong — tap the button to try again.", true);
@@ -411,7 +450,7 @@ function render() {
         ${thumb}
         <span class="listing-main">
           <span class="listing-title">${esc(l.title || l.itemName || "Untitled item")}</span>
-          <span class="listing-meta">${esc(bits)}</span>
+          <span class="listing-meta">${esc(bits)}${l.unsaved ? " · ⏳ not saved yet" : ""}</span>
         </span>
         <span class="listing-side">
           <span class="price-tag">${money(l.price)}</span>
@@ -486,6 +525,10 @@ $("statusRow").querySelectorAll("button").forEach((b) => {
   b.addEventListener("click", async () => {
     const l = getListing(openId);
     if (!l) return;
+    if (l.unsaved) {
+      toast("Save it to your shelf first — tap Save changes.");
+      return;
+    }
     const previous = l.status;
     l.status = b.getAttribute("data-status");
     try {
@@ -518,6 +561,23 @@ $("saveDetailBtn").addEventListener("click", async () => {
   const l = getListing(openId);
   if (!l) return;
   readDetailInto(l);
+  if (l.unsaved) {
+    // This listing only lives on this phone so far — Save means "put it
+    // on the cloud shelf," i.e. insert instead of update.
+    try {
+      const saved = await insertListing(l);
+      const idx = listings.findIndex((x) => x.id === l.id);
+      if (idx >= 0) listings[idx] = saved;
+      openId = saved.id;
+    } catch (err) {
+      toast(err.message);
+      return;
+    }
+    render();
+    toast("Saved to your shelf ✓");
+    closeDetail();
+    return;
+  }
   try {
     await updateListing(l);
   } catch (err) {
@@ -533,6 +593,13 @@ $("deleteBtn").addEventListener("click", async () => {
   const l = getListing(openId);
   if (!l) return;
   if (!confirm("Delete this listing for good?")) return;
+  if (l.unsaved) {
+    listings = listings.filter((x) => x.id !== openId);
+    render();
+    closeDetail();
+    toast("Deleted.");
+    return;
+  }
   try {
     await deleteListing(openId);
   } catch (err) {
@@ -550,6 +617,10 @@ document.querySelectorAll("[data-style]").forEach((btn) => {
   btn.addEventListener("click", async () => {
     const l = getListing(openId);
     if (!l) return;
+    if (l.unsaved) {
+      toast("Save it to your shelf first — tap Save changes.");
+      return;
+    }
     readDetailInto(l); // rewrite what's on screen, including her edits
     const style = btn.getAttribute("data-style");
     const msgEl = $("rewriteMsg");
