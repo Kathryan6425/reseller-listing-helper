@@ -19,6 +19,9 @@
 }
 
 * { box-sizing: border-box; }
+/* The hidden attribute must always win — several components (the detail
+   sheet, toast, panels) combine hidden with classes that set display. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
