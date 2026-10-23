@@ -18,7 +18,13 @@
 
 // Google retires model names over time, so try current ones in order —
 // a 404 just means "that name is gone", and we move on to the next.
-const MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-flash"];
+const MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.8-flash",
+  "gemini-2.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+];
 function apiUrl(model) {
   return (
     "https://generativelanguage.googleapis.com/v1beta/models/" +
@@ -177,7 +183,7 @@ exports.handler = async (event) => {
   let geminiRes = null;
   try {
     for (const model of MODELS) {
-      geminiRes = await fetch(apiUrl(model), {
+      const res = await fetch(apiUrl(model), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -185,8 +191,12 @@ exports.handler = async (event) => {
         },
         body: requestBody,
       });
-      if (geminiRes.status !== 404) break; // 404 = model name retired/unknown — try the next one
-      geminiRes = null;
+      if (res.status === 404) continue; // model name retired/unknown — try the next one
+      if (res.ok) {
+        geminiRes = res;
+        break;
+      }
+      geminiRes = res; // busy/overloaded etc. — remember it, but try the next model too
     }
   } catch (e) {
     return jsonResponse(502, { error: "Couldn't reach the AI writer just now — check back in a moment and try again." });
