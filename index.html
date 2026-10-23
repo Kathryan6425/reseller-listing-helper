@@ -21,6 +21,35 @@
 </header>
 
 <main>
+  <!-- Shown only if the site owner hasn't finished the Supabase setup yet -->
+  <section id="setupNotice" class="card setup-notice" hidden>
+    <h2>☀️ Almost ready!</h2>
+    <p>This site is finishing setup. If you're the owner, add your Supabase
+       Project URL and anon key in <b>config.js</b> (see DEPLOY.md), then redeploy.
+       If you're visiting, check back soon!</p>
+  </section>
+
+  <!-- Sign in / create account -->
+  <section id="authCard" class="card auth-card" hidden>
+    <h2>👋 Welcome!</h2>
+    <p class="auth-hint">Create a free account (or sign in) to save your listings.
+       Your shelf follows you — sign in on any phone and your listings are there.</p>
+    <label class="field-label" for="authEmail">Email</label>
+    <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+    <label class="field-label" for="authPassword">Password</label>
+    <input id="authPassword" type="password" autocomplete="current-password" placeholder="Your password">
+    <button id="signInBtn" class="big-btn" type="button">Sign in</button>
+    <button id="signUpBtn" class="big-btn secondary" type="button">Create account</button>
+    <p id="authMsg" class="capture-msg" role="status"></p>
+  </section>
+
+  <!-- Signed-in bar -->
+  <div id="userBar" class="user-bar" hidden>
+    <span class="user-email">Signed in as <b id="userEmail"></b></span>
+    <button id="signOutBtn" class="ghost-btn" type="button">Sign out</button>
+  </div>
+
+  <div id="appShell" hidden>
   <!-- Totals -->
   <section class="stats" aria-label="Your shelf totals">
     <div class="stat">
@@ -49,14 +78,16 @@
     </div>
 
     <div id="panelPhoto">
-      <label class="photo-drop" for="photoInput">
+      <button id="photoBtn" class="photo-drop" type="button" aria-label="Take a photo or pick one from your library">
         <img id="photoPreview" alt="" hidden>
         <span id="photoPlaceholder">
           <span class="photo-emoji">📷</span>
           <span>Tap to take a photo or pick one</span>
         </span>
-      </label>
-      <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+      </button>
+      <input type="file" id="photoInput" class="stealth-input" accept="image/*" capture="environment">
+      <p class="photo-help">Tap the big button and your camera or photo library will open.
+         Nothing happened? Try opening this page in Safari or Chrome, then tap again.</p>
       <button id="clearPhotoBtn" class="ghost-btn" type="button" hidden>Remove photo</button>
     </div>
 
@@ -76,6 +107,7 @@
   </section>
   <section id="shelf" class="shelf"></section>
   <p id="emptyShelf" class="empty-shelf">Your shelf is empty. Your first photo is your first listing. 🏷️</p>
+  </div><!-- /appShell -->
 </main>
 
 <!-- Detail view -->
@@ -171,6 +203,8 @@
 
 <div id="toast" class="toast" hidden></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

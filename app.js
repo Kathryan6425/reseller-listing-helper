@@ -1,40 +1,17 @@
 "use strict";
 
-/* Reseller Listing Helper — public v1
-   Listings live in this browser's localStorage (no accounts, no database).
+/* Reseller Listing Helper — public v2
+   Accounts + shelves live in Supabase (each user sees only their own rows,
+   enforced again by Row Level Security on the server).
    AI listing writing happens in the Netlify function: netlify/functions/generate-listing.js
+   Site values come from config.js -> window.RLH_CONFIG.
 */
 
-const STORE_KEY = "rlh_listings_v1";
 const FUNCTION_URL = "/.netlify/functions/generate-listing";
 const STATUSES = ["Draft", "Ready", "Listed", "Sold"];
 
-/* ---------- state ---------- */
-let listings = loadListings();
-let pendingPhoto = null; // { sendDataUrl, thumbDataUrl } after picking a photo
-let openId = null;        // listing id shown in the detail sheet
-
-function loadListings() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveListings() {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(listings));
-  } catch (e) {
-    toast("Storage is full — try deleting an old listing with a photo.");
-  }
-}
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
 
 function money(n) {
   const v = Number(n) || 0;
@@ -47,13 +24,6 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
-/* ---------- elements ---------- */
-const $ = (id) => document.getElementById(id);
-const shelfEl = $("shelf");
-const emptyEl = $("emptyShelf");
-const captureMsg = $("captureMsg");
-const generateBtn = $("generateBtn");
-
 /* ---------- toast ---------- */
 let toastTimer = null;
 function toast(msg) {
@@ -62,6 +32,205 @@ function toast(msg) {
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+
+/* ---------- Supabase setup ---------- */
+const cfg = window.RLH_CONFIG || {};
+const supabaseReady = Boolean(
+  cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase
+);
+let sb = null;
+if (supabaseReady) {
+  sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+}
+
+/* ---------- state ---------- */
+let currentUser = null;
+let listings = [];       // this user's listings, newest first (camelCase shape)
+let pendingPhoto = null; // { sendDataUrl, thumbDataUrl } after picking a photo
+let openId = null;       // listing id shown in the detail sheet
+
+/* ---------- row <-> app shape ---------- */
+function rowToListing(r) {
+  return {
+    id: r.id,
+    status: r.status || "Draft",
+    createdAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
+    thumb: r.photo_thumb || "",
+    itemName: r.item_name || "",
+    brand: r.brand || "",
+    size: r.size || "",
+    condition: r.condition || "",
+    title: r.title || "",
+    description: r.description || "",
+    price: Number(r.price) || 0,
+    priceLow: Number(r.price_low) || 0,
+    priceHigh: Number(r.price_high) || 0,
+    platform: r.platform || "Vinted",
+    category: r.category || ""
+  };
+}
+
+function listingToRow(l) {
+  return {
+    user_id: currentUser.id,
+    item_name: l.itemName || "",
+    brand: l.brand || "",
+    size: l.size || "",
+    condition: l.condition || "",
+    title: l.title || "",
+    description: l.description || "",
+    price: Number(l.price) || 0,
+    price_low: Number(l.priceLow) || 0,
+    price_high: Number(l.priceHigh) || 0,
+    platform: l.platform || "Vinted",
+    category: l.category || "",
+    status: STATUSES.includes(l.status) ? l.status : "Draft",
+    photo_thumb: l.thumb || null,
+    updated_at: new Date().toISOString()
+  };
+}
+
+/* ---------- data (all scoped to the signed-in user) ---------- */
+async function loadListings() {
+  if (!currentUser) return;
+  const { data, error } = await sb
+    .from("listings")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    toast("Couldn't load your shelf — check your signal and refresh.");
+    return;
+  }
+  listings = (data || []).map(rowToListing);
+  render();
+}
+
+async function insertListing(l) {
+  const { data, error } = await sb
+    .from("listings")
+    .insert(listingToRow(l))
+    .select()
+    .single();
+  if (error) throw new Error("Your listing was written but couldn't be saved to your shelf — try again.");
+  return rowToListing(data);
+}
+
+async function updateListing(l) {
+  const { error } = await sb
+    .from("listings")
+    .update(listingToRow(l))
+    .eq("id", l.id)
+    .eq("user_id", currentUser.id);
+  if (error) throw new Error("Couldn't save that change — check your signal and try again.");
+}
+
+async function deleteListing(id) {
+  const { error } = await sb
+    .from("listings")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", currentUser.id);
+  if (error) throw new Error("Couldn't delete that listing — try again.");
+}
+
+/* ---------- auth UI ---------- */
+function setAuthMsg(msg, isError, isGood) {
+  const el = $("authMsg");
+  el.textContent = msg || "";
+  el.classList.toggle("error", !!isError);
+  el.classList.toggle("good", !!isGood);
+}
+
+function showSignedOut() {
+  $("setupNotice").hidden = true;
+  $("authCard").hidden = false;
+  $("userBar").hidden = true;
+  $("appShell").hidden = true;
+}
+
+function showSignedIn() {
+  $("setupNotice").hidden = true;
+  $("authCard").hidden = true;
+  $("userBar").hidden = false;
+  $("appShell").hidden = false;
+  $("userEmail").textContent = currentUser.email || "";
+}
+
+function showSetupNotice() {
+  $("setupNotice").hidden = false;
+  $("authCard").hidden = true;
+  $("userBar").hidden = true;
+  $("appShell").hidden = true;
+}
+
+async function handleAuthChange(session) {
+  currentUser = session && session.user ? session.user : null;
+  if (currentUser) {
+    showSignedIn();
+    await loadListings();
+  } else {
+    listings = [];
+    closeDetail();
+    showSignedOut();
+  }
+}
+
+$("signInBtn").addEventListener("click", async () => {
+  const email = $("authEmail").value.trim();
+  const password = $("authPassword").value;
+  if (!email || !password) {
+    setAuthMsg("Type your email and password first.", true);
+    return;
+  }
+  setAuthMsg("Signing you in…");
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    setAuthMsg(friendlyAuthError(error), true);
+    return;
+  }
+  setAuthMsg("");
+  toast("Welcome back! 👋");
+});
+
+$("signUpBtn").addEventListener("click", async () => {
+  const email = $("authEmail").value.trim();
+  const password = $("authPassword").value;
+  if (!email || !password) {
+    setAuthMsg("Type an email and a password to make your account.", true);
+    return;
+  }
+  if (password.length < 6) {
+    setAuthMsg("Passwords need at least 6 characters.", true);
+    return;
+  }
+  setAuthMsg("Creating your account…");
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) {
+    setAuthMsg(friendlyAuthError(error), true);
+    return;
+  }
+  if (data && data.user && !data.session) {
+    // Supabase wants the email confirmed before the first sign-in.
+    setAuthMsg("Account made! 🎉 Now check your email and tap the confirm link, then come back and sign in.", false, true);
+  } else {
+    setAuthMsg("");
+    toast("Account made — you're in! 🎉");
+  }
+});
+
+$("signOutBtn").addEventListener("click", async () => {
+  await sb.auth.signOut();
+  toast("Signed out. See you soon! 👋");
+});
+
+function friendlyAuthError(error) {
+  const m = (error && error.message) || "";
+  if (/invalid login credentials/i.test(m)) return "That email/password combo didn't match. Try again — or tap Create account if you're new.";
+  if (/already registered/i.test(m)) return "That email already has an account — tap Sign in instead.";
+  if (/email not confirmed/i.test(m)) return "Almost there — tap the confirm link in your email first, then sign in.";
+  return m || "Something went wrong — try again in a moment.";
 }
 
 /* ---------- mode tabs ---------- */
@@ -77,9 +246,15 @@ function setMode(m) {
 }
 
 /* ---------- photo handling ---------- */
+// A real button + a real click: the most reliable way to open the
+// camera / photo library from a mobile browser or in-app webview.
+$("photoBtn").addEventListener("click", () => {
+  $("photoInput").click();
+});
+
 $("photoInput").addEventListener("change", async (ev) => {
   const file = ev.target.files && ev.target.files[0];
-  if (!file) return;
+  if (!file) return; // no photo picked — the area stays ready to tap again
   setCaptureMsg("Getting your photo ready…");
   try {
     const full = await downscale(file, 1024, 0.82);
@@ -126,13 +301,19 @@ function downscale(file, maxDim, quality) {
   });
 }
 
+const captureMsg = $("captureMsg");
 function setCaptureMsg(msg, isError) {
   captureMsg.textContent = msg || "";
   captureMsg.classList.toggle("error", !!isError);
 }
 
 /* ---------- create a listing ---------- */
+const generateBtn = $("generateBtn");
 generateBtn.addEventListener("click", async () => {
+  if (!currentUser) {
+    toast("Sign in first so your listing lands on your shelf.");
+    return;
+  }
   const text = $("textInput").value.trim();
   if (mode === "photo" && !pendingPhoto) {
     setCaptureMsg("Add a photo first — or tap “Type it” if you'd rather describe it.", true);
@@ -157,10 +338,8 @@ generateBtn.addEventListener("click", async () => {
   setCaptureMsg("Writing your listing… this can take a few seconds. ✨");
   try {
     const data = await callFunction(payload);
-    const listing = {
-      id: uid(),
+    const drafted = {
       status: "Draft",
-      createdAt: Date.now(),
       thumb: pendingPhoto ? pendingPhoto.thumbDataUrl : "",
       itemName: data.itemName || "",
       brand: data.brand || "",
@@ -174,14 +353,14 @@ generateBtn.addEventListener("click", async () => {
       platform: data.platform || "Vinted",
       category: data.category || ""
     };
-    listings.unshift(listing);
-    saveListings();
+    const saved = await insertListing(drafted);
+    listings.unshift(saved);
     render();
     setCaptureMsg("");
     // reset capture area for the next one
     $("textInput").value = "";
     $("clearPhotoBtn").click();
-    openDetail(listing.id);
+    openDetail(saved.id);
     toast("Listing drafted! It's on your shelf. 🎉");
   } catch (err) {
     // Keep the photo/text right where it was so she can just retry.
@@ -211,6 +390,9 @@ async function callFunction(payload) {
 }
 
 /* ---------- shelf ---------- */
+const shelfEl = $("shelf");
+const emptyEl = $("emptyShelf");
+
 function render() {
   renderStats();
   if (!listings.length) {
@@ -285,6 +467,7 @@ function openDetail(id) {
 }
 
 function closeDetail() {
+  if ($("detailOverlay").hidden) return;
   $("detailOverlay").hidden = true;
   document.body.style.overflow = "";
   openId = null;
@@ -300,11 +483,18 @@ function markStatusButtons(status) {
 
 // Status changes save right away — no separate save tap needed.
 $("statusRow").querySelectorAll("button").forEach((b) => {
-  b.addEventListener("click", () => {
+  b.addEventListener("click", async () => {
     const l = getListing(openId);
     if (!l) return;
+    const previous = l.status;
     l.status = b.getAttribute("data-status");
-    saveListings();
+    try {
+      await updateListing(l);
+    } catch (err) {
+      l.status = previous;
+      toast(err.message);
+      return;
+    }
     render();
     $("dStatus").textContent = String(l.status).toUpperCase();
     $("dStatus").className = "stamp stamp-" + l.status;
@@ -324,22 +514,32 @@ function readDetailInto(l) {
   l.category = $("dCategory").value.trim();
 }
 
-$("saveDetailBtn").addEventListener("click", () => {
+$("saveDetailBtn").addEventListener("click", async () => {
   const l = getListing(openId);
   if (!l) return;
   readDetailInto(l);
-  saveListings();
+  try {
+    await updateListing(l);
+  } catch (err) {
+    toast(err.message);
+    return;
+  }
   render();
   toast("Saved ✓");
   closeDetail();
 });
 
-$("deleteBtn").addEventListener("click", () => {
+$("deleteBtn").addEventListener("click", async () => {
   const l = getListing(openId);
   if (!l) return;
   if (!confirm("Delete this listing for good?")) return;
+  try {
+    await deleteListing(openId);
+  } catch (err) {
+    toast(err.message);
+    return;
+  }
   listings = listings.filter((x) => x.id !== openId);
-  saveListings();
   render();
   closeDetail();
   toast("Deleted.");
@@ -360,7 +560,7 @@ document.querySelectorAll("[data-style]").forEach((btn) => {
       const data = await callFunction({ style, currentListing: l });
       if (data.title) { l.title = data.title; $("dTitle").value = data.title; }
       if (data.description) { l.description = data.description; $("dDescription").value = data.description; }
-      saveListings();
+      await updateListing(l); // rewrite-save writes through to the cloud shelf
       render();
       msgEl.textContent = "Done — how's that read?";
     } catch (err) {
@@ -410,4 +610,15 @@ $("copyFullBtn").addEventListener("click", () => {
 });
 
 /* ---------- go ---------- */
-render();
+(async function init() {
+  if (!supabaseReady) {
+    showSetupNotice();
+    return;
+  }
+  showSignedOut(); // safe default until the session check comes back
+  const { data } = await sb.auth.getSession();
+  await handleAuthChange(data ? data.session : null);
+  sb.auth.onAuthStateChange((_event, session) => {
+    handleAuthChange(session);
+  });
+})();
