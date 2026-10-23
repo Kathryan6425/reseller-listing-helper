@@ -16,11 +16,16 @@
  * GEMINI_API_KEY environment variable in Netlify — never hardcode it here.
  */
 
-const MODEL = "gemini-2.0-flash";
-const API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/" +
-  MODEL +
-  ":generateContent";
+// Google retires model names over time, so try current ones in order —
+// a 404 just means "that name is gone", and we move on to the next.
+const MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-flash"];
+function apiUrl(model) {
+  return (
+    "https://generativelanguage.googleapis.com/v1beta/models/" +
+    model +
+    ":generateContent"
+  );
+}
 
 const PLATFORMS = ["Depop", "Facebook Marketplace", "Vinted"];
 
@@ -161,24 +166,34 @@ exports.handler = async (event) => {
     });
   }
 
-  let geminiRes;
+  const requestBody = JSON.stringify({
+    contents: [{ parts }],
+    generationConfig: {
+      temperature: 0.6,
+      responseMimeType: "application/json",
+    },
+  });
+
+  let geminiRes = null;
   try {
-    geminiRes = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0.6,
-          responseMimeType: "application/json",
+    for (const model of MODELS) {
+      geminiRes = await fetch(apiUrl(model), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
         },
-      }),
-    });
+        body: requestBody,
+      });
+      if (geminiRes.status !== 404) break; // 404 = model name retired/unknown — try the next one
+      geminiRes = null;
+    }
   } catch (e) {
     return jsonResponse(502, { error: "Couldn't reach the AI writer just now — check back in a moment and try again." });
+  }
+
+  if (!geminiRes) {
+    return jsonResponse(502, { error: "The AI writer had a problem (404) — try again in a moment." });
   }
 
   if (!geminiRes.ok) {
