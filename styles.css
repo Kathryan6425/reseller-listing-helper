@@ -264,3 +264,83 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(255, 183, 3,
   font-size: 15px; font-weight: 700; z-index: 99; box-shadow: 0 8px 24px rgba(0,0,0,.35);
   max-width: 92vw; text-align: center;
 }
+
+/* ============================================================
+   V3 LOOK UPDATE (Oct 23, 2026) — Kathryn asked for a fresher,
+   happier look after V2 ran smoothly. Everything below is
+   paint only: same classes, same layout, no logic changes.
+   Appended last so these rules win over the V2 ones above.
+   ============================================================ */
+
+/* Confetti-dot sunshine backdrop */
+body {
+  background:
+    radial-gradient(rgba(255, 107, 74, .10) 2.2px, transparent 2.6px) 0 0 / 26px 26px,
+    radial-gradient(rgba(139, 92, 246, .10) 2.2px, transparent 2.6px) 13px 13px / 26px 26px,
+    linear-gradient(180deg, #fff6e9 0%, #ffeef7 55%, #eef9ff 100%);
+  background-attachment: fixed;
+}
+
+/* Header: taller, sparklier, chunkier title */
+.topbar {
+  padding: 30px 14px 24px;
+  background:
+    radial-gradient(rgba(255,255,255,.35) 2px, transparent 2.6px) 0 0 / 22px 22px,
+    linear-gradient(120deg, #ffb703 0%, #ff6b4a 38%, #ff3d77 72%, #8b5cf6 100%);
+  border-radius: 0 0 30px 30px;
+}
+.brand-mark {
+  font-size: 46px; border-radius: 50%; padding: 8px 10px;
+  animation: badge-pop .6s ease-out 1;
+}
+@keyframes badge-pop {
+  0% { transform: scale(.5) rotate(-14deg); }
+  60% { transform: scale(1.12) rotate(2deg); }
+  100% { transform: scale(1) rotate(-3deg); }
+}
+@media (prefers-reduced-motion: reduce) { .brand-mark { animation: none; } }
+.brand h1 { font-size: 26px; font-weight: 900; letter-spacing: .01em; }
+.brand-sub { font-size: 14px; }
+
+/* Stat tiles: full pastel fills instead of plain white */
+.stat { border-width: 2px; padding: 16px 6px 13px; border-radius: 26px; }
+.stat:nth-child(1) { background: #fff3cf; border-color: #ffd60a; }
+.stat:nth-child(2) { background: #d9f7f2; border-color: #00b8a9; }
+.stat.stat-sold     { background: #ffe0ec; border-color: #ff5e8a; }
+.stat-num { font-size: 28px; }
+
+/* Cards & headings: rounder, softer, wavy-underline headings */
+.card { border-radius: 28px; padding: 24px 20px; }
+.card h2, .shelf-head h2 {
+  text-decoration: underline wavy rgba(255, 183, 3, .75) 2px;
+  text-underline-offset: 6px;
+}
+
+/* Buttons: chunkier with a happy press */
+.big-btn { padding: 19px; font-size: 18.5px; transition: transform .08s ease, box-shadow .2s ease; }
+.big-btn:active { transform: scale(.975); }
+.chip-btn, .mode-tab { transition: transform .08s ease; }
+.chip-btn:active, .mode-tab:active { transform: scale(.96); }
+
+/* Photo area: sunnier, bolder dashes, bigger camera */
+.photo-drop { border: 4px dashed #ff8fab; border-radius: 24px; min-height: 200px; }
+.photo-emoji { font-size: 58px; filter: drop-shadow(0 4px 6px rgba(255, 61, 119, .35)); }
+
+/* Listing cards: lift on touch, playful tilted tag with a punched hole */
+.listing-card { border-radius: 26px; transition: transform .1s ease; }
+.listing-card:active { transform: scale(.985); }
+.price-tag {
+  position: relative; font-size: 17.5px; padding: 6px 13px 6px 17px;
+  border-radius: 10px; transform: rotate(-3deg);
+}
+.price-tag::before {
+  content: ""; position: absolute; left: 5px; top: 50%; width: 6px; height: 6px;
+  margin-top: -3px; border-radius: 50%; background: #fff8e1;
+  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.25);
+}
+
+/* Detail sheet title gets the rainbow treatment */
+.sheet-head h2 {
+  background: linear-gradient(90deg, #ff6b4a, #ff3d77, #8b5cf6);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
