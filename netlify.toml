@@ -1,0 +1,7 @@
+# Reseller Listing Helper — Netlify settings
+# The whole site is plain files: no build step needed.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = ""

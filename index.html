@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Reseller Listing Helper — Geeksmith Made Apps</title>
+<meta name="description" content="Snap a photo of anything you're selling. Get a title, description, and fair price — ready to post.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🏷️</span>
+    <div>
+      <h1>Reseller Listing Helper</h1>
+      <p class="brand-sub">by Geeksmith Made Apps</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Totals -->
+  <section class="stats" aria-label="Your shelf totals">
+    <div class="stat">
+      <span class="stat-num" id="statWaitingCount">0</span>
+      <span class="stat-label">waiting to post</span>
+      <span class="stat-money" id="statWaitingMoney">$0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num" id="statListedCount">0</span>
+      <span class="stat-label">listed</span>
+      <span class="stat-money" id="statListedMoney">$0</span>
+    </div>
+    <div class="stat stat-sold">
+      <span class="stat-num" id="statSoldCount">0</span>
+      <span class="stat-label">sold</span>
+      <span class="stat-money" id="statSoldMoney">$0</span>
+    </div>
+  </section>
+
+  <!-- Capture -->
+  <section class="card capture-card">
+    <h2>What are you selling?</h2>
+    <div class="mode-tabs" role="tablist">
+      <button id="tabPhoto" class="mode-tab active" type="button">📸 Snap a photo</button>
+      <button id="tabType" class="mode-tab" type="button">⌨️ Type it</button>
+    </div>
+
+    <div id="panelPhoto">
+      <label class="photo-drop" for="photoInput">
+        <img id="photoPreview" alt="" hidden>
+        <span id="photoPlaceholder">
+          <span class="photo-emoji">📷</span>
+          <span>Tap to take a photo or pick one</span>
+        </span>
+      </label>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+      <button id="clearPhotoBtn" class="ghost-btn" type="button" hidden>Remove photo</button>
+    </div>
+
+    <div id="panelType" hidden>
+      <label class="field-label" for="textInput">Describe the item</label>
+      <textarea id="textInput" rows="3" placeholder="Example: women's black leather Converse high-tops, size 9.5, worn a few times, great shape"></textarea>
+    </div>
+
+    <button id="generateBtn" class="big-btn" type="button">✨ Write my listing</button>
+    <p id="captureMsg" class="capture-msg" role="status"></p>
+  </section>
+
+  <!-- Shelf -->
+  <section class="shelf-head">
+    <h2>Your shelf</h2>
+    <p class="shelf-hint">Nothing posts itself — every listing waits here until you copy it and post it.</p>
+  </section>
+  <section id="shelf" class="shelf"></section>
+  <p id="emptyShelf" class="empty-shelf">Your shelf is empty. Your first photo is your first listing. 🏷️</p>
+</main>
+
+<!-- Detail view -->
+<div id="detailOverlay" class="overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+    <div class="sheet-head">
+      <h2 id="detailTitle">Listing</h2>
+      <button id="closeDetailBtn" class="close-btn" type="button" aria-label="Close">✕</button>
+    </div>
+
+    <img id="dPhoto" class="detail-photo" alt="" hidden>
+
+    <div class="stamp-row">
+      <span id="dStatus" class="stamp">DRAFT</span>
+      <span id="dPlatform" class="platform-chip">Vinted</span>
+    </div>
+
+    <label class="field-label" for="dTitle">Title</label>
+    <div class="field-row">
+      <input id="dTitle" type="text">
+      <button class="copy-btn" type="button" data-copy="title">Copy</button>
+    </div>
+
+    <label class="field-label" for="dDescription">Description</label>
+    <div class="field-row field-row-top">
+      <textarea id="dDescription" rows="6"></textarea>
+      <button class="copy-btn" type="button" data-copy="description">Copy</button>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <label class="field-label" for="dPrice">Your price ($)</label>
+        <input id="dPrice" type="number" min="0" step="1" inputmode="decimal">
+        <p class="price-note" id="dPriceRange"></p>
+      </div>
+      <div>
+        <label class="field-label" for="dPlatformSelect">Sell it on</label>
+        <select id="dPlatformSelect">
+          <option>Depop</option>
+          <option>Facebook Marketplace</option>
+          <option>Vinted</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <label class="field-label" for="dBrand">Brand</label>
+        <input id="dBrand" type="text">
+      </div>
+      <div>
+        <label class="field-label" for="dSize">Size</label>
+        <input id="dSize" type="text">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div>
+        <label class="field-label" for="dCondition">Condition</label>
+        <input id="dCondition" type="text">
+      </div>
+      <div>
+        <label class="field-label" for="dCategory">Category</label>
+        <input id="dCategory" type="text">
+      </div>
+    </div>
+
+    <button id="copyFullBtn" class="big-btn secondary" type="button">📋 Copy the whole listing</button>
+
+    <div class="rewrite-box">
+      <p class="field-label">Rewrite the words</p>
+      <div class="chip-row">
+        <button class="chip-btn" type="button" data-style="shorter">✂️ Shorter</button>
+        <button class="chip-btn" type="button" data-style="more detail">🔍 More detail</button>
+        <button class="chip-btn" type="button" data-style="friendlier">😊 Friendlier</button>
+      </div>
+      <p id="rewriteMsg" class="capture-msg" role="status"></p>
+    </div>
+
+    <div class="status-box">
+      <p class="field-label">Where is this listing?</p>
+      <div class="status-row" id="statusRow">
+        <button type="button" data-status="Draft">Draft</button>
+        <button type="button" data-status="Ready">Ready</button>
+        <button type="button" data-status="Listed">Listed</button>
+        <button type="button" data-status="Sold">Sold 🎉</button>
+      </div>
+    </div>
+
+    <button id="saveDetailBtn" class="big-btn" type="button">Save changes</button>
+    <button id="deleteBtn" class="danger-btn" type="button">Delete this listing</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
